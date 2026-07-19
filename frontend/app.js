@@ -537,8 +537,20 @@
       });
 
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.detail || 'Synthesis failed');
+        let errorMsg = 'Synthesis failed';
+        try {
+          const err = await response.json();
+          errorMsg = err.detail || errorMsg;
+        } catch (jsonErr) {
+          // Response wasn't JSON (e.g. Vercel HTML 500) — read as text
+          try {
+            const text = await response.text();
+            errorMsg = text.slice(0, 200);
+          } catch (textErr) {
+            errorMsg = `HTTP ${response.status}: Server error`;
+          }
+        }
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();

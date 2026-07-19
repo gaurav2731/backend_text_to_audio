@@ -26,8 +26,30 @@ os.environ.setdefault("AUDIO_DIR", "/tmp/audio_files")
 # Ensure AUDIO_DIR exists (Vercel /tmp is ephemeral but writable)
 os.makedirs("/tmp/audio_files", exist_ok=True)
 
-# ── Import FastAPI app ────────────────────────────────────────────
-from main import app as fastapi_app
+# ── Import FastAPI app with error diagnostics ──────────────────────
+try:
+    from main import app as fastapi_app
+except ImportError as e:
+    import traceback
+    print(f"[Freebuff] CRITICAL: Failed to import FastAPI app: {e}")
+    print(f"sys.path: {sys.path}")
+    print(traceback.format_exc())
+    # Serve a minimal fallback for diagnostics
+    from fastapi import FastAPI
+    from fastapi.responses import JSONResponse
 
-# Vercel Python Runtime expects an ASGI-compatible ``app``
-app = fastapi_app
+    fallback_app = FastAPI(title="Freebuff Voice (Import Error)")
+
+    @fallback_app.route("/{path:path}", methods=["GET", "POST", "OPTIONS", "HEAD"])
+    async def catch_all(path: str):
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": f"Server import error: {str(e)}",
+                "sys_path": sys.path,
+            },
+        )
+
+    app = fallback_app
+else:
+    app = fastapi_app

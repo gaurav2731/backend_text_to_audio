@@ -90,6 +90,22 @@ app.add_middleware(
 )
 
 
+# ─── Global Exception Handler (catch-all → JSON) ──────────────────
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch ALL unhandled exceptions and return JSON instead of Vercel's HTML 500."""
+    import traceback
+    error_detail = str(exc)
+    tb = traceback.format_exc()
+    print(f"[Freebuff] Unhandled error: {error_detail}\n{tb}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Server error: {error_detail}"},
+    )
+
+
 # ─── Helper ────────────────────────────────────────────────────────
 
 
