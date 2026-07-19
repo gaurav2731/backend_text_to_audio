@@ -3,14 +3,14 @@ Text-to-Voice Generator — Vercel Python Serverless Function
 Routes all /api/* requests to the FastAPI backend app.
 
 Vercel bundles the entire project into the serverless function, so
-``backend/main.py`` and ``backend/tts_engine.py`` are available via
+backend/main.py and backend/tts_engine.py are available via
 sys.path manipulation.
 """
 import sys
 import os
 
 # ── Path setup ────────────────────────────────────────────────────
-# Ensure backend/ is on sys.path so ``from main import app`` works
+# Ensure backend/ is on sys.path so "from main import app" works
 _api_dir = os.path.dirname(os.path.abspath(__file__))
 _project_root = os.path.dirname(_api_dir)
 _backend_path = os.path.join(_project_root, 'backend')
@@ -26,7 +26,7 @@ os.environ.setdefault("AUDIO_DIR", "/tmp/audio_files")
 # Ensure AUDIO_DIR exists (Vercel /tmp is ephemeral but writable)
 os.makedirs("/tmp/audio_files", exist_ok=True)
 
-# ── Import FastAPI app with error diagnostics ──────────────────────
+# ── Import FastAPI app with error diagnostics ─────────────────────
 try:
     from main import app as fastapi_app
 except ImportError as e:
@@ -34,22 +34,40 @@ except ImportError as e:
     print(f"[Freebuff] CRITICAL: Failed to import FastAPI app: {e}")
     print(f"sys.path: {sys.path}")
     print(traceback.format_exc())
-    # Serve a minimal fallback for diagnostics
-    from fastapi import FastAPI
-    from fastapi.responses import JSONResponse
 
-    fallback_app = FastAPI(title="Freebuff Voice (Import Error)")
+    # Fallback: try to serve a minimal FastAPI diagnostic app
+    try:
+        from fastapi import FastAPI
+        from fastapi.responses import JSONResponse
 
-    @fallback_app.route("/{path:path}", methods=["GET", "POST", "OPTIONS", "HEAD"])
-    async def catch_all(path: str):
-        return JSONResponse(
-            status_code=500,
-            content={
-                "detail": f"Server import error: {str(e)}",
-                "sys_path": sys.path,
-            },
-        )
+        fallback_app = FastAPI(title="Freebuff Voice (Import Error)")
 
-    app = fallback_app
+        @fallback_app.route("/{path:path}", methods=["GET", "POST", "OPTIONS", "HEAD"])
+        async def catch_all(path: str):
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": f"Server import error: {str(e)}",
+                    "sys_path": sys.path,
+                },
+            )
+        app = fallback_app
+
+    except Exception as inner_e:
+        # Last resort — FastAPI itself is missing. Return a raw ASGI response.
+        import json
+        detail = f"Server import error: {str(e)} (fallback also failed: {inner_e})"
+
+        async def app(scope, receive, send):
+            body = json.dumps({"detail": detail}).encode("utf-8")
+            await send({
+                "type": "http.response.start",
+                "status": 500,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            })
+            await send({"type": "http.response.body", "body": body})
 else:
     app = fastapi_app
