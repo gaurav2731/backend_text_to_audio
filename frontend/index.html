@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Freebuff Voice — Text‑to‑Voice Generator</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙️</text></svg>" />
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ─── Animated Background ─── -->
+  <div class="bg-gradient" id="bgGradient"></div>
+  <div class="bg-particles" id="bgParticles"></div>
+
+  <!-- ─── Main Container ─── -->
+  <div class="app-container">
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-top">
+        <div class="logo">
+          <span class="logo-icon">🎙️</span>
+          <h1>Freebuff<span>Voice</span></h1>
+        </div>
+        <button class="lang-toggle" id="langToggle" title="Switch UI language">हिन्दी</button>
+      </div>
+      <p class="subtitle" data-i18n="subtitle">Convert text into natural, expressive speech with AI</p>
+    </header>
+
+    <!-- Main Card -->
+    <main class="main-card">
+
+      <!-- Text Input Section -->
+      <section class="input-section">
+        <div class="input-header">
+          <label for="textInput" data-i18n="inputLabel">Enter your text</label>
+          <span class="char-count" id="charCount">0 / 5000</span>
+        </div>
+        <div class="textarea-wrapper">
+          <textarea
+            id="textInput"
+            placeholder="Type or paste your text here... For example: Hello! Welcome to Freebuff Voice. I'm excited to turn your words into lifelike speech!"
+            data-i18n-placeholder="inputPlaceholder"
+            maxlength="5000"
+            rows="5"
+            spellcheck="true"
+          ></textarea>
+          <div class="textarea-actions">
+            <button class="btn-icon" id="clearBtn" data-i18n-title="clear">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Controls Grid -->
+      <section class="controls-section">
+        <!-- Voice Style -->
+        <div class="control-group">
+          <label class="control-label">
+            <span class="label-icon">🗣️</span> <span data-i18n="voiceStyleLabel">Voice</span>
+          </label>
+          <div class="voice-selector-wrapper">
+            <!-- Accent/Region tabs -->
+            <div class="voice-accent-tabs" id="voiceAccentTabs">
+              <button class="accent-tab active" data-group="US English" data-flag="🇺🇸">🇺🇸 US</button>
+              <button class="accent-tab" data-group="UK English" data-flag="🇬🇧">🇬🇧 UK</button>
+              <button class="accent-tab" data-group="Indian English" data-flag="🇮🇳">🇮🇳 India</button>
+              <button class="accent-tab" data-group="Australian English" data-flag="🇦🇺">🇦🇺 AU</button>
+              <button class="accent-tab" data-group="Canadian English" data-flag="🇨🇦">🇨🇦 CA</button>
+            </div>
+            <!-- Voice Cards Grid -->
+            <div class="voice-cards-container" id="voiceCardsContainer">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Emotion -->
+        <div class="control-group">
+          <label class="control-label">
+            <span class="label-icon">🎭</span> <span data-i18n="emotionLabel">Emotion</span>
+          </label>
+          <div class="control-buttons" id="emotionButtons" role="radiogroup" aria-label="Emotion">
+            <button class="ctrl-btn active" data-value="neutral" data-i18n-title="neutral">
+              <span class="btn-icon">😐</span>
+              <span class="btn-text" data-i18n="neutral">Neutral</span>
+            </button>
+            <button class="ctrl-btn" data-value="happy" data-i18n-title="happy">
+              <span class="btn-icon">😊</span>
+              <span class="btn-text" data-i18n="happy">Happy</span>
+            </button>
+            <button class="ctrl-btn" data-value="sad" data-i18n-title="sad">
+              <span class="btn-icon">😢</span>
+              <span class="btn-text" data-i18n="sad">Sad</span>
+            </button>
+            <button class="ctrl-btn" data-value="excited" data-i18n-title="excited">
+              <span class="btn-icon">🎉</span>
+              <span class="btn-text" data-i18n="excited">Excited</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Language -->
+        <div class="control-group">
+          <label class="control-label">
+            <span class="label-icon">🌐</span> <span data-i18n="languageLabel">Speech Language</span>
+          </label>
+          <div class="select-wrapper">
+            <select id="languageSelect">
+              <option value="en">English</option>
+              <option value="hi">Hindi (हिन्दी)</option>
+              <option value="es">Spanish (Español)</option>
+              <option value="fr">French (Français)</option>
+              <option value="de">German (Deutsch)</option>
+              <option value="ja">Japanese (日本語)</option>
+              <option value="zh">Chinese (中文)</option>
+              <option value="ko">Korean (한국어)</option>
+              <option value="pt">Portuguese (Português)</option>
+              <option value="ru">Russian (Русский)</option>
+              <option value="ar">Arabic (العربية)</option>
+              <option value="ta">Tamil (தமிழ்)</option>
+              <option value="te">Telugu (తెలుగు)</option>
+              <option value="bn">Bengali (বাংলা)</option>
+              <option value="gu">Gujarati (ગુજરાતી)</option>
+              <option value="mr">Marathi (मराठी)</option>
+            </select>
+            <span class="select-arrow">▾</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Generate Button -->
+      <button class="generate-btn" id="generateBtn">
+        <span class="btn-content">
+          <svg class="mic-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="22"/>
+          </svg>
+          <span id="generateText" data-i18n="generateText">Generate Speech</span>
+        </span>
+        <div class="loading-spinner" id="loadingSpinner">
+          <div class="spinner-ring"></div>
+          <span data-i18n="synthesizing">Synthesizing...</span>
+        </div>
+      </button>
+
+      <!-- Result Section -->
+      <section class="result-section" id="resultSection" style="display:none;">
+        <div class="result-divider">
+          <span class="divider-label" data-i18n="generatedSpeech">Generated Speech</span>
+        </div>
+
+        <div class="audio-player-container">
+          <div class="waveform-bar" id="waveformBar">
+            <canvas id="waveformCanvas" height="64"></canvas>
+          </div>
+          <div class="audio-controls">
+            <button class="play-btn" id="playBtn" data-i18n-title="playPause">
+              <svg id="playIcon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+            </button>
+            <div class="audio-timeline">
+              <span class="time-current" id="timeCurrent">0:00</span>
+              <input type="range" class="seek-bar" id="seekBar" min="0" max="100" value="0" />
+              <span class="time-total" id="timeTotal">0:00</span>
+            </div>
+            <div class="audio-meta">
+              <span class="meta-badge engine-badge" id="engineBadge">edge-tts</span>
+              <span class="meta-badge" id="durationBadge">0s</span>
+            </div>
+            <div class="download-group">
+              <input type="text" class="filename-input" id="filenameInput" data-i18n-placeholder="filenamePlaceholder" value="freebuff-speech" maxlength="50" data-i18n-title="filenamePlaceholder" />
+              <select class="format-select" id="downloadFormat" title="Select audio format">
+                <option value="mp3">MP3</option>
+                <option value="wav">WAV</option>
+              </select>
+              <button class="download-btn" id="downloadBtn" title="Download audio file">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- History Section -->
+      <section class="history-section" id="historySection" style="display:none;">
+        <div class="history-header">
+          <div class="history-header-left">
+            <span class="history-icon">📋</span>
+            <span class="divider-label" data-i18n="historyTitle">History</span>
+            <span class="history-count" id="historyCount">0</span>
+          </div>
+          <div class="history-header-right">
+            <label class="history-toggle-label">
+              <input type="checkbox" id="historyAutoSave" checked />
+              <span class="toggle-slider"></span>
+              <span class="toggle-text" data-i18n="autoSave">Auto-save</span>
+            </label>
+            <button class="btn-icon history-clear-btn" id="historyClearBtn" data-i18n-title="historyClear" title="Clear All">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="history-empty" id="historyEmpty" data-i18n="historyEmpty">
+          No speech generated yet. Your last 20 recordings will appear here.
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>Powered by <strong>Freebuff</strong> · Edge TTS &amp; Google TTS engines</p>
+    </footer>
+  </div>
+
+  <!-- ─── Hidden Audio Element ─── -->
+  <audio id="audioPlayer" preload="none"></audio>
+
+  <!-- ─── Toast ─── -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="translations.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

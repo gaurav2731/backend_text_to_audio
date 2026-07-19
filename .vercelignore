@@ -1,0 +1,13 @@
+# Vercel only needs the Python API + static frontend
+# These files would confuse Vercel's framework detection:
+
+# Node.js / Express leftovers (not used on Vercel)
+backend/api/
+backend/Dockerfile
+backend/package-lock.json
+backend/node_modules/
+
+# Local dev artifacts
+nul
+README.md
+audio_files/
