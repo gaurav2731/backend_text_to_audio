@@ -95,7 +95,14 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Catch ALL unhandled exceptions and return JSON instead of Vercel's HTML 500."""
+    """Catch ALL unhandled exceptions and return JSON instead of Vercel's HTML 500.
+    Preserves HTTPException status codes and detail messages.
+    """
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+        )
     import traceback
     error_detail = str(exc)
     tb = traceback.format_exc()
