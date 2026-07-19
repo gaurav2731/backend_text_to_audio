@@ -13,8 +13,15 @@ from typing import Optional
 from xml.sax.saxutils import escape as xml_escape
 
 # Audio output directory
-AUDIO_DIR = Path(__file__).parent.parent / "audio_files"
-AUDIO_DIR.mkdir(exist_ok=True)
+# On Vercel, AUDIO_DIR env var is set to /tmp/audio_files (writable).
+# Locally, default to <project_root>/audio_files.
+AUDIO_DIR = Path(os.environ.get("AUDIO_DIR", Path(__file__).parent.parent / "audio_files"))
+# mkdir may fail on read-only filesystems (Vercel /var/task).
+# On Vercel, AUDIO_DIR is /tmp (writable), so this succeeds.
+try:
+    AUDIO_DIR.mkdir(exist_ok=True)
+except OSError:
+    pass
 
 
 class Emotion(str, Enum):

@@ -65,7 +65,10 @@ class SynthesizeResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    AUDIO_DIR.mkdir(exist_ok=True)
+    try:
+        AUDIO_DIR.mkdir(exist_ok=True)
+    except OSError:
+        pass
     yield
     # Shutdown
     if not IS_VERCEL:
