@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -77,34 +76,6 @@ async def lifespan(app: FastAPI):
         cleanup_old_files(max_age_minutes=10)
 
 
-# ─── ASGI Middleware (catches ALL exceptions before Vercel's HTML 500) ──
-
-
-class ErrorCatchMiddleware(BaseHTTPMiddleware):
-    """
-    Catches ANY exception raised during request processing and returns JSON.
-    This is the LAST line of defense — placed before Vercel's default HTML 500.
-    Without this, Vercel intercepts unhandled ASGI exceptions and returns HTML.
-    """
-
-    async def dispatch(self, request: Request, call_next):
-        try:
-            response = await call_next(request)
-            return response
-        except HTTPException as exc:
-            return JSONResponse(
-                status_code=exc.status_code,
-                content={"detail": exc.detail},
-            )
-        except Exception as exc:
-            tb = traceback.format_exc()
-            print(f"[Freebuff][Middleware] Unhandled error: {exc}\n{tb}")
-            return JSONResponse(
-                status_code=500,
-                content={"detail": f"Server error: {str(exc)}"},
-            )
-
-
 # ─── FastAPI App ───────────────────────────────────────────────────
 
 app = FastAPI(
@@ -122,8 +93,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ADD the error-catching middleware LAST so it wraps everything
-app.add_middleware(ErrorCatchMiddleware)
+
+# ─── Error-catching middleware (catches ALL unhandled exceptions) ──
+# Uses the modern @app.middleware("http") pattern (avoids deprecated BaseHTTPMiddleware)
+# This runs after CORS middleware, before route handlers.
+# Combined with wrap_app() in api/index.py (ASGI level) and
+# global_exception_handler() below (FastAPI level) for defense-in-depth.
+
+
+@app.middleware("http")
+async def error_catch_middleware(request: Request, call_next):
+    """
+    Catch ANY exception during request processing and return JSON.
+    This is one of THREE defense layers:
+    1. wrap_app() in api/index.py (ASGI-level, outermost)
+    2. This middleware (FastAPI middleware-level)
+    3. global_exception_handler() (FastAPI exception handler, innermost)
+    """
+    try:
+        response = await call_next(request)
+        return response
+    except HTTPException as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+        )
+    except Exception as exc:
+        tb = traceback.format_exc()
+        print(f"[Freebuff][Middleware] Unhandled error: {exc}\n{tb}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Server error: {str(exc)}"},
+        )
 
 
 # ─── Global Exception Handler (FastAPI-level fallback) ────────────

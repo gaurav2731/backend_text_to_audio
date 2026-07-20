@@ -69,10 +69,10 @@ def wrap_app(inner_app):
 # ── Import FastAPI app with error diagnostics ─────────────────────
 try:
     from main import app as fastapi_app
-except ImportError as e:
+except Exception as e:
     print(f"[Freebuff] CRITICAL: Failed to import FastAPI app: {e}")
     print(f"sys.path: {sys.path}")
-    print(traceback.format_exc())
+    traceback.print_exc()
 
     # Fallback: try to serve a minimal FastAPI diagnostic app
     try:
@@ -93,22 +93,27 @@ except ImportError as e:
         app = wrap_app(fallback_app)
 
     except Exception as inner_e:
-        # Last resort — FastAPI itself is missing. Return a raw ASGI response.
-        detail = f"Server import error: {str(e)} (fallback also failed: {inner_e})"
+        # Last resort — none of the frameworks are usable. Return a raw ASGI response.
+        err_msg = f"Server import error: {str(e)}"
+        fallback_detail = f"{err_msg} (fallback also failed: {inner_e})"
+        print(f"[Freebuff] FATAL: {fallback_detail}")
 
         async def fallback_asgi(scope, receive, send):
-            body = json.dumps({"detail": detail}).encode("utf-8")
+            if scope["type"] != "http":
+                return
+            body = json.dumps({"detail": err_msg}).encode("utf-8")
             await send({
                 "type": "http.response.start",
                 "status": 500,
                 "headers": [
                     (b"content-type", b"application/json"),
                     (b"content-length", str(len(body)).encode()),
+                    (b"access-control-allow-origin", b"*"),
                 ],
             })
             await send({"type": "http.response.body", "body": body})
 
         app = wrap_app(fallback_asgi)
 else:
-    # Wrap the FastAPI app so ALL errors return JSON
+    # Wrap the FastAPI app so ALL errors return JSON at the ASGI level
     app = wrap_app(fastapi_app)
