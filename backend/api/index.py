@@ -67,6 +67,8 @@ def wrap_app(inner_app):
 
 
 # ── Import FastAPI app with error diagnostics ─────────────────────
+_actual_app = None
+
 try:
     from main import app as fastapi_app
 except Exception as e:
@@ -90,7 +92,7 @@ except Exception as e:
                     "sys_path": sys.path,
                 },
             )
-        app = wrap_app(fallback_app)
+        _actual_app = wrap_app(fallback_app)
 
     except Exception as inner_e:
         # Last resort — none of the frameworks are usable. Return a raw ASGI response.
@@ -113,7 +115,10 @@ except Exception as e:
             })
             await send({"type": "http.response.body", "body": body})
 
-        app = wrap_app(fallback_asgi)
+        _actual_app = wrap_app(fallback_asgi)
 else:
     # Wrap the FastAPI app so ALL errors return JSON at the ASGI level
-    app = wrap_app(fastapi_app)
+    _actual_app = wrap_app(fastapi_app)
+
+# Export the app for Vercel
+app = _actual_app
