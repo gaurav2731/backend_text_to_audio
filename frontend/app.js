@@ -7,11 +7,15 @@
   'use strict';
 
   // ─── Config ─────────────────────────────────────────────────────
-  // In production (Vercel), API lives at the same origin under /api/*.
-  // Locally, point this to your FastAPI server, e.g. 'http://localhost:9000'.
+  // If your frontend and backend are deployed separately, set BACKEND_URL to your backend Vercel URL
+  // e.g. 'https://your-backend-project.vercel.app/api'
+  const BACKEND_URL = 'YOUR_BACKEND_URL_HERE';
+
+  // In production, point to the BACKEND_URL if configured; otherwise default to '/api' for same-origin
+  // Locally, point this to your local FastAPI server 'http://localhost:9000/api'
   const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:9000/api'
-    : '/api';
+    : (BACKEND_URL !== 'YOUR_BACKEND_URL_HERE' ? BACKEND_URL : '/api');
 
   // ─── DOM References ─────────────────────────────────────────────
   const textInput        = document.getElementById('textInput');
