@@ -8,6 +8,8 @@ sys.path manipulation.
 """
 import sys
 import os
+import json
+import traceback
 
 # ── Path setup ────────────────────────────────────────────────────
 # Ensure backend/ is on sys.path so "from main import app" works
@@ -26,11 +28,48 @@ os.environ.setdefault("AUDIO_DIR", "/tmp/audio_files")
 # Ensure AUDIO_DIR exists (Vercel /tmp is ephemeral but writable)
 os.makedirs("/tmp/audio_files", exist_ok=True)
 
+
+# ── ASGI Error-Catching Wrapper ───────────────────────────────────
+# This is the OUTERMOST wrapper — it catches ANY exception that
+# escapes the FastAPI middleware/exception-handler chain and
+# returns JSON. Without this, Vercel intercepts unhandled ASGI
+# exceptions and returns its default HTML 500 page.
+def wrap_app(inner_app):
+    """Wrap an ASGI app so it ALWAYS returns JSON on error."""
+    async def wrapped_app(scope, receive, send):
+        # Only intercept HTTP requests
+        if scope["type"] != "http":
+            await inner_app(scope, receive, send)
+            return
+
+        try:
+            await inner_app(scope, receive, send)
+        except Exception as exc:
+            tb = traceback.format_exc()
+            print(f"[Freebuff][VercelWrapper] Unhandled error: {exc}\n{tb}")
+
+            body = json.dumps({
+                "detail": f"Server error: {str(exc)}"
+            }).encode("utf-8")
+
+            await send({
+                "type": "http.response.start",
+                "status": 500,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                    (b"access-control-allow-origin", b"*"),
+                ],
+            })
+            await send({"type": "http.response.body", "body": body})
+
+    return wrapped_app
+
+
 # ── Import FastAPI app with error diagnostics ─────────────────────
 try:
     from main import app as fastapi_app
 except ImportError as e:
-    import traceback
     print(f"[Freebuff] CRITICAL: Failed to import FastAPI app: {e}")
     print(f"sys.path: {sys.path}")
     print(traceback.format_exc())
@@ -51,14 +90,13 @@ except ImportError as e:
                     "sys_path": sys.path,
                 },
             )
-        app = fallback_app
+        app = wrap_app(fallback_app)
 
     except Exception as inner_e:
         # Last resort — FastAPI itself is missing. Return a raw ASGI response.
-        import json
         detail = f"Server import error: {str(e)} (fallback also failed: {inner_e})"
 
-        async def app(scope, receive, send):
+        async def fallback_asgi(scope, receive, send):
             body = json.dumps({"detail": detail}).encode("utf-8")
             await send({
                 "type": "http.response.start",
@@ -69,5 +107,8 @@ except ImportError as e:
                 ],
             })
             await send({"type": "http.response.body", "body": body})
+
+        app = wrap_app(fallback_asgi)
 else:
-    app = fastapi_app
+    # Wrap the FastAPI app so ALL errors return JSON
+    app = wrap_app(fastapi_app)

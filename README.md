@@ -34,6 +34,12 @@ Run from the **project root** directory:
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 9000 --reload
 ```
 
+If you run this command from inside the `backend` directory, Python may not find the top-level `backend` package. In that case either run the server from the project root (recommended), or run this instead from inside `backend`:
+
+```bash
+python -m uvicorn main:app --host 0.0.0.0 --port 9000 --reload
+```
+
 The API will be available at `http://localhost:9000`
 
 ### 3. Open the Web UI

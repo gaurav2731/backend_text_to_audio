@@ -7,6 +7,7 @@ Supports both local development (file-based) and Vercel (in-memory audio).
 import os
 import sys
 import base64
+import traceback
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -16,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -75,6 +77,34 @@ async def lifespan(app: FastAPI):
         cleanup_old_files(max_age_minutes=10)
 
 
+# ─── ASGI Middleware (catches ALL exceptions before Vercel's HTML 500) ──
+
+
+class ErrorCatchMiddleware(BaseHTTPMiddleware):
+    """
+    Catches ANY exception raised during request processing and returns JSON.
+    This is the LAST line of defense — placed before Vercel's default HTML 500.
+    Without this, Vercel intercepts unhandled ASGI exceptions and returns HTML.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        try:
+            response = await call_next(request)
+            return response
+        except HTTPException as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+            )
+        except Exception as exc:
+            tb = traceback.format_exc()
+            print(f"[Freebuff][Middleware] Unhandled error: {exc}\n{tb}")
+            return JSONResponse(
+                status_code=500,
+                content={"detail": f"Server error: {str(exc)}"},
+            )
+
+
 # ─── FastAPI App ───────────────────────────────────────────────────
 
 app = FastAPI(
@@ -92,37 +122,47 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ADD the error-catching middleware LAST so it wraps everything
+app.add_middleware(ErrorCatchMiddleware)
 
-# ─── Global Exception Handler (catch-all → JSON) ──────────────────
+
+# ─── Global Exception Handler (FastAPI-level fallback) ────────────
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Catch ALL unhandled exceptions and return JSON instead of Vercel's HTML 500.
     Preserves HTTPException status codes and detail messages.
+    This is the FastAPI-level handler; the middleware above is an ASGI-level safety net.
     """
     if isinstance(exc, HTTPException):
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail},
         )
-    import traceback
     error_detail = str(exc)
     tb = traceback.format_exc()
-    print(f"[Freebuff] Unhandled error: {error_detail}\n{tb}")
+    print(f"[Freebuff][ExceptionHandler] Unhandled error: {error_detail}\n{tb}")
     return JSONResponse(
         status_code=500,
         content={"detail": f"Server error: {error_detail}"},
     )
 
 
-# ─── Helper ────────────────────────────────────────────────────────
+# ─── Helpers ──────────────────────────────────────────────────────
 
 
 def estimate_duration(text: str) -> float:
     """Rough estimate of speech duration in seconds (~150 words/min average)."""
     words = len(text.split())
     return round(max(words / 150 * 60, 1.0), 2)
+
+
+def encode_audio_base64(audio_bytes: Optional[bytes]) -> Optional[str]:
+    """Encode raw audio bytes to a base64 data URI for inline playback."""
+    if not audio_bytes:
+        return None
+    return f"data:audio/mpeg;base64,{base64.b64encode(audio_bytes).decode('utf-8')}"
 
 
 # ─── Root health-check (served both at /api and /) ─────────────────
@@ -228,10 +268,7 @@ async def synthesize(request: SynthesizeRequest):
                 detail=result.get("error", "Speech synthesis failed"),
             )
 
-        audio_bytes = result.get("audio_bytes")
-        audio_b64 = None
-        if audio_bytes:
-            audio_b64 = f"data:audio/mpeg;base64,{base64.b64encode(audio_bytes).decode('utf-8')}"
+        audio_b64 = encode_audio_base64(result.get("audio_bytes"))
 
         return SynthesizeResponse(
             success=True,
@@ -271,9 +308,7 @@ async def synthesize(request: SynthesizeRequest):
             except Exception:
                 pass
 
-        audio_b64 = None
-        if audio_bytes:
-            audio_b64 = f"data:audio/mpeg;base64,{base64.b64encode(audio_bytes).decode('utf-8')}"
+        audio_b64 = encode_audio_base64(audio_bytes)
 
         return SynthesizeResponse(
             success=True,
@@ -309,10 +344,23 @@ async def get_audio(filename: str):
 
 if __name__ == "__main__":
     import uvicorn
+    import socket
+
+    def is_port_in_use(port: int) -> bool:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(('127.0.0.1', port)) == 0
+
+    port = int(os.environ.get("PORT", 9000))
+
+    if is_port_in_use(port):
+        print(f"[!] Port {port} is already in use. Trying port 9001.")
+        port = 9001
+
+    print(f"[*] Starting server on http://localhost:{port}")
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=9000,
+        port=port,
         reload=True,
         log_level="info",
     )

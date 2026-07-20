@@ -572,34 +572,8 @@ async def apply_emotion_post_process(
     try:
         from pydub import AudioSegment
 
-        profile = EMOTION_PROFILE[emotion]
         audio = AudioSegment.from_file(str(audio_path), format="mp3")
-
-        # Speed change
-        rate_str = profile["rate"]
-        rate_val = int(rate_str.replace("%", "").replace("+", ""))
-        if rate_val != 0:
-            speed_factor = 1.0 + rate_val / 100.0
-            new_sample_rate = int(audio.frame_rate * speed_factor)
-            audio = audio._spawn(
-                audio.raw_data, overrides={"frame_rate": new_sample_rate}
-            ).set_frame_rate(audio.frame_rate)
-
-        # Volume change
-        vol_str = profile["volume"]
-        if vol_str.endswith("dB"):
-            vol_val = float(vol_str.replace("dB", ""))
-            audio = audio + vol_val
-
-        # Pitch change (approximation)
-        pitch_str = profile["pitch"]
-        pitch_val = int(pitch_str.replace("%", "").replace("+", ""))
-        if pitch_val != 0:
-            octaves = pitch_val / 100.0 * 0.5
-            new_sample_rate = int(audio.frame_rate * (2.0 ** octaves))
-            audio = audio._spawn(
-                audio.raw_data, overrides={"frame_rate": new_sample_rate}
-            ).set_frame_rate(audio.frame_rate)
+        audio = _apply_pydub_emotion(audio, emotion)
 
         # Save processed audio
         processed_path = audio_path.with_stem(audio_path.stem + "_processed")
@@ -608,6 +582,75 @@ async def apply_emotion_post_process(
     except Exception as e:
         print(f"[post-process] Error: {e}")
         return audio_path
+
+
+def _apply_pydub_emotion(audio, emotion: Emotion):
+    """Apply emotion profile effects (rate, volume, pitch) to a pydub AudioSegment."""
+    profile = EMOTION_PROFILE[emotion]
+
+    # Speed change
+    rate_str = profile["rate"]
+    rate_val = int(rate_str.replace("%", "").replace("+", ""))
+    if rate_val != 0:
+        speed_factor = 1.0 + rate_val / 100.0
+        new_sample_rate = int(audio.frame_rate * speed_factor)
+        audio = audio._spawn(
+            audio.raw_data, overrides={"frame_rate": new_sample_rate}
+        ).set_frame_rate(audio.frame_rate)
+
+    # Volume change
+    vol_str = profile["volume"]
+    if vol_str.endswith("dB"):
+        vol_val = float(vol_str.replace("dB", ""))
+        audio = audio + vol_val
+
+    # Pitch change (approximation)
+    pitch_str = profile["pitch"]
+    pitch_val = int(pitch_str.replace("%", "").replace("+", ""))
+    if pitch_val != 0:
+        octaves = pitch_val / 100.0 * 0.5
+        new_sample_rate = int(audio.frame_rate * (2.0 ** octaves))
+        audio = audio._spawn(
+            audio.raw_data, overrides={"frame_rate": new_sample_rate}
+        ).set_frame_rate(audio.frame_rate)
+
+    return audio
+
+
+async def apply_emotion_post_process_bytes(
+    audio_bytes: bytes, emotion: Emotion
+) -> bytes:
+    """Apply emotion post-processing to raw audio bytes in memory using pydub."""
+    try:
+        import tempfile
+        from pydub import AudioSegment
+
+        # Write bytes to a temp file, process, then read back
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_in:
+            tmp_in_path = tmp_in.name
+            tmp_in.write(audio_bytes)
+
+        try:
+            audio = AudioSegment.from_file(tmp_in_path, format="mp3")
+            audio = _apply_pydub_emotion(audio, emotion)
+
+            # Export to another temp file and read back
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_out:
+                tmp_out_path = tmp_out.name
+
+            audio.export(tmp_out_path, format="mp3")
+
+            with open(tmp_out_path, "rb") as f:
+                processed_bytes = f.read()
+
+            os.unlink(tmp_out_path)
+            return processed_bytes
+        finally:
+            if os.path.exists(tmp_in_path):
+                os.unlink(tmp_in_path)
+    except Exception as e:
+        print(f"[post-process-bytes] Error: {e}")
+        return audio_bytes
 
 
 async def generate_speech(
@@ -670,7 +713,7 @@ async def generate_speech(
         fallback = True
         audio_path = await synthesize_gtts(text=text, lang=language)
 
-        # Apply emotion post-processing to gTTS output
+        # Apply emotion post-processing to gTTS output using pydub
         if audio_path and emotion != Emotion.NEUTRAL:
             audio_path = await apply_emotion_post_process(audio_path, emotion)
 
@@ -759,10 +802,9 @@ async def generate_speech_bytes(
         fallback = True
         audio_bytes = await synthesize_gtts_bytes(text=text, lang=language)
 
-        # Emotion post-processing for gTTS (in-memory not yet supported)
-        # Note: full emotion post-processing on bytes is available but requires pydub
+        # Apply emotion post-processing to gTTS bytes via pydub
         if audio_bytes and emotion != Emotion.NEUTRAL:
-            result["emotion_applied"] = True
+            audio_bytes = await apply_emotion_post_process_bytes(audio_bytes, emotion)
 
     if not audio_bytes:
         result["error"] = "All TTS engines failed to generate speech"

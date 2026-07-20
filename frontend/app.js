@@ -53,8 +53,6 @@
   // ─── State ──────────────────────────────────────────────────────
   let currentAudioUrl    = null;
   let currentFilename    = null;
-  let currentText        = '';
-  let currentVoice       = 'us_female_jenny';
   let currentEmotion     = 'neutral';
   let currentLanguage    = 'en';
   let isPlaying          = false;
@@ -62,7 +60,6 @@
   let analyser           = null;
   let source             = null;
   let rafId              = null;
-  let waveformData       = new Uint8Array(128).fill(128);
   let currentLang        = localStorage.getItem('fbv-lang') || 'en';
   const HISTORY_KEY      = 'fbv-history';
   const MAX_HISTORY      = 20;
@@ -536,24 +533,37 @@
         body: JSON.stringify({ text, voice, emotion, language }),
       });
 
-      if (!response.ok) {
-        let errorMsg = 'Synthesis failed';
+      // ── Helper: safely extract error message ────────────────
+      // Reads the response body ONCE as text, then tries JSON.parse on it.
+      // This avoids the "body already consumed" problem with sequential
+      // response.json() → response.text() calls.
+      async function extractError(resp) {
         try {
-          const err = await response.json();
-          errorMsg = err.detail || errorMsg;
-        } catch (jsonErr) {
-          // Response wasn't JSON (e.g. Vercel HTML 500) — read as text
+          const text = await resp.text();
+          // First: try to parse as JSON (backend returns JSON errors)
           try {
-            const text = await response.text();
-            errorMsg = text.slice(0, 200);
-          } catch (textErr) {
-            errorMsg = `HTTP ${response.status}: Server error`;
-          }
+            const parsed = JSON.parse(text);
+            return parsed.detail || parsed.message || 'Synthesis failed';
+          } catch { /* not JSON — display as plain text */ }
+          // Strip HTML tags for safe display
+          const cleaned = text.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+          return cleaned.substring(0, 150) || `HTTP ${resp.status}: Server error`;
+        } catch {
+          return `HTTP ${resp.status}: Server error`;
         }
+      }
+
+      if (!response.ok) {
+        const errorMsg = await extractError(response);
         throw new Error(errorMsg);
       }
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonErr) {
+        throw new Error('Invalid response from server (expected JSON). Please try again.');
+      }
       currentFilename = data.filename;
       currentAudioUrl = getAudioUrlFromResponse(data);
 
@@ -753,8 +763,6 @@
     if (!item) return;
 
     currentFilename = item.filename;
-    currentText = item.text;
-    currentVoice = item.voice;
     currentEmotion = item.emotion;
     currentLanguage = item.language;
 
