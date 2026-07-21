@@ -166,6 +166,24 @@ def encode_audio_base64(audio_bytes: Optional[bytes]) -> Optional[str]:
     return f"data:audio/mpeg;base64,{base64.b64encode(audio_bytes).decode('utf-8')}"
 
 
+# ─── Ping / Test Endpoint (lightest possible Vercel smoke-test) ───
+# This endpoint has ZERO dependencies beyond FastAPI itself.
+# If this works on Vercel but /api/synthesize doesn't, the issue is
+# in the TTS engine imports or runtime (edge-tts, gTTS, pydub).
+
+
+@app.get("/api/ping")
+async def ping():
+    """Simple health-check with no dependencies. Use this to verify the
+    basic Python serverless function works on Vercel before testing
+    the full synthesis pipeline."""
+    return {
+        "status": "ok",
+        "vercel": IS_VERCEL,
+        "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+    }
+
+
 # ─── Root health-check (served both at /api and /) ─────────────────
 
 
@@ -177,6 +195,7 @@ async def root():
         "version": "1.0.0",
         "status": "operational",
         "endpoints": {
+            "ping": "GET /api/ping",
             "synthesize": "POST /api/synthesize",
             "languages": "GET /api/languages",
             "voices": "GET /api/voices",
