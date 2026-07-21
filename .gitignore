@@ -29,7 +29,10 @@ package-lock.json
 Thumbs.db
 
 # Freebuff internal
-.freebuff/
-
-# Vercel
+.freebuff/# Vercel
 .vercel
+
+# Temporary / junk files
+nul
+pyrightconfig.json
+

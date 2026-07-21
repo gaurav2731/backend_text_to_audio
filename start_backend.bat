@@ -5,7 +5,7 @@ SET VENV_PYTHON=%SCRIPT_DIR%backend\.venv\Scripts\python.exe
 
 REM Use venv python if available, otherwise use system python
 IF EXIST "%VENV_PYTHON%" (
-    SET PYTHON_CMD=%VENV_PYTHON%
+    SET PYTHON_CMD="%VENV_PYTHON%"
 ) ELSE (
     SET PYTHON_CMD=python
 )
