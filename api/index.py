@@ -62,32 +62,45 @@ def wrap_app(inner_app):
 
 
 # ── Import FastAPI app (with error diagnostics) ────────────────────
-# Vercel requires a top-level `app` variable.
+# IMPORTANT: Vercel does STATIC analysis on this file to find the
+# top-level 'app' variable. The assignment MUST be at module scope,
+# NOT inside a try/except block, otherwise the build fails with:
+#   "Could not find a top-level 'app' in api/index.py"
+#
+# Strategy: declare app = None at top level first, then set it.
 
-try:
-    from main import app as fastapi_app
-    app = wrap_app(fastapi_app)
-except Exception as e:
-    print(f"[Vercel] CRITICAL: Failed to import FastAPI app: {e}")
-    print(f"sys.path: {sys.path}")
-    traceback.print_exc()
+app = None  # <-- Signals to Vercel's analyzer: "app exists here"
 
-    # Fallback — return JSON describing the error
-    detail = f"Server import error: {str(e)}"
 
-    async def fallback_app(scope, receive, send):
-        if scope["type"] != "http":
-            return
-        body = json.dumps({"detail": detail}).encode("utf-8")
-        await send({
-            "type": "http.response.start",
-            "status": 500,
-            "headers": [
-                (b"content-type", b"application/json"),
-                (b"content-length", str(len(body)).encode()),
-                (b"access-control-allow-origin", b"*"),
-            ],
-        })
-        await send({"type": "http.response.body", "body": body})
+def _build_app():
+    """Import and wrap the FastAPI app; return a fallback on error."""
+    try:
+        from main import app as fastapi_app
+        return wrap_app(fastapi_app)
+    except Exception as e:
+        print(f"[Vercel] CRITICAL: Failed to import FastAPI app: {e}")
+        print(f"sys.path: {sys.path}")
+        traceback.print_exc()
 
-    app = wrap_app(fallback_app)
+        detail = f"Server import error: {str(e)}"
+
+        async def fallback_app(scope, receive, send):
+            if scope["type"] != "http":
+                return
+            body = json.dumps({"detail": detail}).encode("utf-8")
+            await send({
+                "type": "http.response.start",
+                "status": 500,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                    (b"access-control-allow-origin", b"*"),
+                ],
+            })
+            await send({"type": "http.response.body", "body": body})
+
+        return wrap_app(fallback_app)
+
+
+# Top-level assignment — Vercel's static analyzer sees this.
+app = _build_app()
